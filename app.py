@@ -1,27 +1,33 @@
 import streamlit as st
-import google.generativeai as genai
+from doc_processor import process_document
+from asr_client import transcribe_audio
+from llm_client import process_with_llm
 
-st.set_page_config(page_title="Diagnóstico de API", layout="wide")
-st.title("Consola de Diagnóstico: Google Generative AI")
+st.set_page_config(page_title="Análisis Semántico Médico", page_icon="🩺", layout="wide")
 
-try:
-    # Intento de autenticación
-    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-    st.info("Autenticación exitosa. Consultando listado de modelos vinculados a la API Key...")
-    
-    # Consulta directa a los servidores de Google
-    modelos_generativos = []
-    for m in genai.list_models():
-        if 'generateContent' in m.supported_generation_methods:
-            modelos_generativos.append(m.name)
-            
-    # Evaluación de resultados
-    if not modelos_generativos:
-        st.error("Fallo Crítico: La API Key es válida, pero el servidor devuelve una lista vacía de modelos. Esto requiere generar una nueva clave directamente desde aistudio.google.com verificando que no haya restricciones.")
+st.title("Sistema de Resúmenes Médicos (Motor Gemini 2.5)")
+st.markdown("Plataforma técnica para la síntesis de clases magistrales y bibliografía.")
+
+col1, col2 = st.columns(2)
+with col1:
+    audio_file = st.file_uploader("Audio de la ponencia [.wav, .mp3, .m4a]", type=["wav", "mp3", "m4a"])
+with col2:
+    doc_file = st.file_uploader("Documento de referencia [.pdf, .pptx]", type=["pdf", "pptx"])
+
+if st.button("Ejecutar Pipeline de Análisis", type="primary"):
+    if not audio_file and not doc_file:
+        st.error("Protocolo interrumpido: Se requiere al menos una fuente de datos.")
     else:
-        st.success("Modelos generativos detectados y autorizados para esta credencial:")
-        for modelo in modelos_generativos:
-            st.code(modelo)
+        with st.spinner("Realizando inferencia semántica..."):
+            texto_doc = process_document(doc_file) if doc_file else None
+            texto_audio = transcribe_audio(audio_file) if audio_file else None
             
-except Exception as e:
-    st.error(f"Error de ejecución en la capa de red: {str(e)}")
+            resultado = process_with_llm(texto_audio, texto_doc)
+            
+            st.success("Análisis completado exitosamente.")
+            st.markdown("---")
+            st.markdown(resultado)
+            
+            if texto_audio:
+                with st.expander("Ver Log de Transcripción"):
+                    st.write(texto_audio)
