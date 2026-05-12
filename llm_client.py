@@ -1,53 +1,30 @@
-import streamlit as st
 import google.generativeai as genai
-# Importación de las variables sistémicas
+import streamlit as st
 from prompts import PROMPT_INTEGRADO, PROMPT_AUDIO, PROMPT_DOCUMENTO
 
-def process_with_llm(raw_transcript: str = None, document_context: str = None) -> str:
+def process_with_llm(texto_audio=None, texto_doc=None):
     """
-    Motor de inferencia semántica y estructuración jerárquica.
-    Evalúa la disponibilidad de datos y enruta la solicitud al prompt correspondiente.
+    Coordina la inferencia semántica basada en las fuentes disponibles.
     """
+    # Configuración de la API Key desde Secrets
+    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+    
+    # Selección del modelo estable para la capa gratuita
+    model = genai.GenerativeModel('gemini-1.5-flash')
+    
+    # Lógica de construcción de prompt según disponibilidad de datos
+    if texto_audio and texto_doc:
+        prompt_final = PROMPT_INTEGRADO.format(transcripcion=texto_audio, documento=texto_doc)
+    elif texto_audio:
+        prompt_final = PROMPT_AUDIO.format(transcripcion=texto_audio)
+    elif texto_doc:
+        prompt_final = PROMPT_DOCUMENTO.format(documento=texto_doc)
+    else:
+        return "Error: No se proporcionaron fuentes de datos válidas para el análisis."
+
     try:
-        # Configuración segura de credenciales
-        genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-        
-        # Instanciación del modelo. 
-        model = genai.GenerativeModel('gemini-1.5-pro-latest')
-        
-        # Configuración determinista de hiperparámetros
-        generation_config = genai.GenerationConfig(
-            temperature=0.1,  # Minimiza la probabilidad de alteraciones semánticas
-            top_p=0.8
-        )
-
-        # 1. Lógica de Enrutamiento Condicional
-        if raw_transcript and document_context:
-            input_data = f"--- TRANSCRIPCIÓN ASR ---\n{raw_transcript}\n\n--- CONTEXTO BIBLIOGRÁFICO ---\n{document_context}"
-            prompt_sistema = PROMPT_INTEGRADO
-            
-        elif raw_transcript and not document_context:
-            input_data = f"--- TRANSCRIPCIÓN ASR ---\n{raw_transcript}"
-            prompt_sistema = PROMPT_AUDIO
-            
-        elif document_context and not raw_transcript:
-            input_data = f"--- CONTEXTO BIBLIOGRÁFICO ---\n{document_context}"
-            prompt_sistema = PROMPT_DOCUMENTO
-            
-        else:
-            return "Error de Inferencia: Vectores nulos. Se requiere al menos un flujo de datos."
-
-        # 2. Ejecución de la Inferencia
-        response = model.generate_content(
-            contents=[
-                {"role": "user", "parts": [prompt_sistema, input_data]}
-            ],
-            generation_config=generation_config
-        )
-        
+        # Ejecución de la generación de contenido
+        response = model.generate_content(prompt_final)
         return response.text
-
-    except KeyError:
-        return "Error de Configuración: No se encontró GEMINI_API_KEY en st.secrets."
     except Exception as e:
         return f"Error crítico en el motor LLM: {str(e)}"
