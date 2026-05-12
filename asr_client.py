@@ -8,33 +8,30 @@ def transcribe_audio(audio_file):
         return ""
     
     try:
-        # Configuramos Gemini con tu llave gratuita
+        # Forzamos la configuración técnica
         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
         
-        # Creamos un archivo temporal local para subirlo a Google
         file_path = "temp_audio_file"
         with open(file_path, "wb") as f:
             f.write(audio_file.getbuffer())
         
-        # Subimos el audio a la API de Google
         audio_upload = genai.upload_file(path=file_path, mime_type=audio_file.type)
         
-        # Esperamos a que Google procese el audio
         while audio_upload.state.name == "PROCESSING":
             time.sleep(2)
             audio_upload = genai.get_file(audio_upload.name)
             
         if audio_upload.state.name == "FAILED":
-            return "Error: El procesamiento del audio en Google falló."
+            return "Error: Falla en el procesamiento del audio."
             
-        # Usamos Gemini 1.5 Flash (el modelo rápido y gratis) para transcribir
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        # Usamos el identificador de modelo más estable
+        model = genai.GenerativeModel(model_name='gemini-1.5-flash')
+        
         response = model.generate_content([
-            "Por favor, transcribe este audio íntegramente en español. Si es una clase médica, asegúrate de escribir correctamente los términos técnicos.",
+            "Transcribe este audio íntegramente. Mantén la precisión técnica médica.",
             audio_upload
         ])
         
-        # Limpieza: Borramos el archivo de los servidores de Google y el temporal
         genai.delete_file(audio_upload.name)
         if os.path.exists(file_path):
             os.remove(file_path)
