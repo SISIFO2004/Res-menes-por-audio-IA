@@ -1,54 +1,33 @@
 import streamlit as st
-
-# Importación directa de lógica (Estructura Plana)
 from doc_processor import process_document
 from asr_client import transcribe_audio
 from llm_client import process_with_llm
 
-# 1. Configuración de la Interfaz Estricta
-st.set_page_config(
-    page_title="Procesador ASR y Análisis Semántico",
-    page_icon="🩺",
-    layout="wide"
-)
+st.set_page_config(page_title="Resúmenes Médicos IA", page_icon="🩺", layout="wide")
 
-st.title("Sistema de Transcripción y Estructuración Lógica")
-st.markdown("Plataforma de síntesis de audio mediante inferencia acústica y contexto bibliográfico.")
-st.markdown("---")
+st.title("Sistema de Resúmenes Médicos 100% Gratuito")
+st.markdown("Procesamiento de audio y documentos mediante Google Gemini 1.5.")
 
-# 2. Ingesta de Datos (Columnas de UI)
-coll, col2 = st.columns(2)
-
-with coll:
-    audio_file = st.file_uploader(
-        "Carga la grabación (Clase magistral, ponencia, etc.) [.wav, .mp3, .m4a]",
-        type=["wav", "mp3", "m4a"]
-    )
-
+col1, col2 = st.columns(2)
+with col1:
+    audio_file = st.file_uploader("Carga tu audio (Clase, ponencia)", type=["wav", "mp3", "m4a"])
 with col2:
-    doc_file = st.file_uploader(
-        "Carga bibliografía de referencia (Opcional) [.pdf, .pptx]",
-        type=["pdf", "pptx"]
-    )
+    doc_file = st.file_uploader("Carga bibliografía (PDF/PPTX)", type=["pdf", "pptx"])
 
-# 3. Pipeline de Ejecución
-if st.button("Ejecutar Pipeline"):
+if st.button("Generar Resumen Inteligente", type="primary"):
     if not audio_file and not doc_file:
-        st.error("Error: Se requiere al menos una fuente de entrada (audio o documento).")
+        st.error("Sube al menos un archivo.")
     else:
-        with st.spinner("Procesando información..."):
-            # Procesamiento de Documento
-            contexto_doc = None
-            if doc_file:
-                contexto_doc = process_document(doc_file)
+        with st.spinner("Gemini está analizando tus archivos..."):
+            texto_doc = process_document(doc_file) if doc_file else None
+            texto_audio = transcribe_audio(audio_file) if audio_file else None
             
-            # Procesamiento de Audio
-            transcripcion = None
-            if audio_file:
-                transcripcion = transcribe_audio(audio_file)
+            resultado = process_with_llm(texto_audio, texto_doc)
             
-            # Generación de Resumen Estructurado (Inferencia Semántica)
-            resultado = process_with_llm(transcripcion, contexto_doc)
+            st.success("¡Análisis completado!")
+            st.markdown("---")
+            st.markdown(resultado)
             
-            st.markdown("### Resultado del Análisis Científico")
-            st.write(resultado)
+            if texto_audio:
+                with st.expander("Ver transcripción completa"):
+                    st.write(texto_audio)
