@@ -24,7 +24,7 @@ def transcribe_audio(audio_file):
         if audio_upload.state.name == "FAILED":
             return "Error: Falla en el procesamiento del audio."
             
-        model = genai.GenerativeModel(model_name='gemini-1.5-flash')
+        model = genai.GenerativeModel('models/gemini-1.5-flash-latest')
         
         response = model.generate_content([
             "Transcribe este audio íntegramente. Mantén la precisión técnica médica.",
