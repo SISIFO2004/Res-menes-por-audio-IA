@@ -1,4 +1,9 @@
 import streamlit as st
+import sys
+import os
+
+# Inyección de ruta para resolver fallos de montaje en el servidor de Streamlit
+sys.path.append(os.path.abspath(os.path.dirname(__file__)))
 
 # Importación de los módulos lógicos (Pipeline)
 from utils.doc_processor import process_document
