@@ -8,8 +8,8 @@ def transcribe_audio(audio_file):
         return ""
     
     try:
-        # Forzamos la configuración técnica
-        genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+# Forzamos el uso del nombre de modelo estándar
+model = genai.GenerativeModel(model_name='gemini-1.5-flash')
         
         file_path = "temp_audio_file"
         with open(file_path, "wb") as f:
