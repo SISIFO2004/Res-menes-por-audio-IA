@@ -6,7 +6,7 @@ def process_with_llm(texto_audio=None, texto_doc=None):
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
     
     # Especificamos el modelo flash de forma explícita
-    model = genai.GenerativeModel(model_name='gemini-1.5-flash')
+    model = genai.GenerativeModel('models/gemini-1.5-flash-latest')
     
     if texto_audio and texto_doc:
         prompt_final = PROMPT_INTEGRADO.format(transcripcion=texto_audio, documento=texto_doc)
