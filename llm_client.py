@@ -6,13 +6,11 @@ def process_with_llm(texto_audio=None, texto_doc=None):
     """
     Motor de análisis semántico basado en texto transcrito y/o contexto documental.
     """
-    # Autenticación de la API
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
     
-    # Asignación del modelo estático (Hardcoded version hash)
-    model = genai.GenerativeModel('gemini-1.5-flash-001')
+    # Ejecución del Fallback a la versión fundacional
+    model = genai.GenerativeModel('gemini-pro')
     
-    # Lógica condicional de prompts
     if texto_audio and texto_doc:
         prompt_final = PROMPT_INTEGRADO.format(transcripcion=texto_audio, documento=texto_doc)
     elif texto_audio:
@@ -23,7 +21,6 @@ def process_with_llm(texto_audio=None, texto_doc=None):
         return "Error: Ausencia de matrices de datos para el análisis."
 
     try:
-        # Ejecución de inferencia
         response = model.generate_content(prompt_final)
         return response.text
     except Exception as e:
