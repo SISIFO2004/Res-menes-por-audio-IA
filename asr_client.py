@@ -23,8 +23,8 @@ def transcribe_audio(audio_file):
         if audio_upload.state.name == "FAILED":
             return "Error: Falla crítica en el procesamiento acústico."
             
-        # Ejecución del Fallback a la versión fundacional
-        model = genai.GenerativeModel('gemini-pro')
+        # Inyección del modelo soportado por la credencial actual
+        model = genai.GenerativeModel('models/gemini-2.5-flash')
         
         response = model.generate_content([
             "Transcribe este audio íntegramente. Mantén la precisión técnica médica.",
