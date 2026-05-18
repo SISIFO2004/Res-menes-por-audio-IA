@@ -1,62 +1,54 @@
-import io
 import PyPDF2
 from pptx import Presentation
-from typing import Optional
+import io
 
-def _extract_from_pdf(file_stream: io.BytesIO) -> str:
+def process_documents(doc_files):
     """
-    Itera sobre un archivo PDF binario y extrae el texto por página.
-    Mantiene un índice de paginación para contexto estructural.
+    Procesa una lista de archivos PDF y PPTX subidos a través de Streamlit.
+    Extrae el texto plano de manera eficiente y lo estructura con etiquetas 
+    de origen para facilitar la validación cruzada del LLM.
     """
-    texto_extraido = []
-    try:
-        reader = PyPDF2.PdfReader(file_stream)
-        for i, page in enumerate(reader.pages):
-            texto_pagina = page.extract_text()
-            if texto_pagina:
-                # Se añade un marcador de página para ayudar a la IA con la jerarquía
-                texto_extraido.append(f"--- Página {i+1} ---\n{texto_pagina}\n")
-        
-        return "\n".join(texto_extraido)
-    except Exception as e:
-        return f"Error crítico al leer el PDF: {str(e)}"
-
-def _extract_from_pptx(file_stream: io.BytesIO) -> str:
-    """
-    Itera sobre las diapositivas de un PPTX y extrae el texto de las formas (shapes).
-    """
-    texto_extraido = []
-    try:
-        prs = Presentation(file_stream)
-        for i, slide in enumerate(prs.slides):
-            texto_slide = []
-            for shape in slide.shapes:
-                if hasattr(shape, "text"):
-                    texto_slide.append(shape.text)
-            
-            if texto_slide:
-                # Se consolida el texto por diapositiva
-                contenido = " ".join(texto_slide).replace('\n', ' ')
-                texto_extraido.append(f"--- Diapositiva {i+1} ---\n{contenido}\n")
-                
-        return "\n".join(texto_extraido)
-    except Exception as e:
-        return f"Error crítico al leer el PPTX: {str(e)}"
-
-def process_document(uploaded_file) -> Optional[str]:
-    """
-    Función de enrutamiento principal. 
-    Recibe el archivo cargado y delega la extracción según la extensión.
-    """
-    if uploaded_file is None:
+    if not doc_files:
         return None
-
-    file_name = uploaded_file.name.lower()
-    file_stream = io.BytesIO(uploaded_file.getvalue())
+        
+    # Usamos una lista para almacenar fragmentos (mucho más rápido que += en strings largos)
+    text_chunks = []
     
-    if file_name.endswith('.pdf'):
-        return _extract_from_pdf(file_stream)
-    elif file_name.endswith('.pptx'):
-        return _extract_from_pptx(file_stream)
-    else:
-        return "Error: Formato de documento no soportado. Utilice PDF o PPTX."
+    for doc in doc_files:
+        nombre_archivo = doc.name
+        text_chunks.append(f"\n\n=========== [INICIO DE DOCUMENTO: {nombre_archivo}] ===========\n")
+        
+        try:
+            # Procesamiento de PDFs
+            if nombre_archivo.lower().endswith('.pdf'):
+                pdf_reader = PyPDF2.PdfReader(doc)
+                for page_num, page in enumerate(pdf_reader.pages):
+                    texto_pagina = page.extract_text()
+                    if texto_pagina:
+                        # Añadimos indicadores de página para mayor precisión del LLM
+                        text_chunks.append(f"\n[Pág. {page_num + 1}] {texto_pagina.strip()}")
+                        
+            # Procesamiento de Diapositivas (PowerPoint)
+            elif nombre_archivo.lower().endswith('.pptx'):
+                # Streamlit pasa el archivo en memoria, usamos BytesIO para que python-pptx lo lea correctamente
+                ppt = Presentation(io.BytesIO(doc.read()))
+                for slide_num, slide in enumerate(ppt.slides):
+                    slide_text = []
+                    for shape in slide.shapes:
+                        if hasattr(shape, "text") and shape.text.strip():
+                            slide_text.append(shape.text.strip())
+                    
+                    if slide_text:
+                        texto_unido = " | ".join(slide_text)
+                        text_chunks.append(f"\n[Diapositiva {slide_num + 1}] {texto_unido}")
+            
+            else:
+                text_chunks.append(f"\n[Advertencia: Formato de archivo no soportado para extracción de texto]")
+
+        except Exception as e:
+            text_chunks.append(f"\n[ERROR: Falla técnica al extraer datos de {nombre_archivo}. Detalle: {str(e)}]")
+            
+        text_chunks.append(f"\n=========== [FIN DE DOCUMENTO: {nombre_archivo}] ===========\n")
+            
+    # Unimos todos los fragmentos eficientemente y retornamos el super-string
+    return "".join(text_chunks)
