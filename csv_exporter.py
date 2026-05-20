@@ -1,7 +1,8 @@
 def create_flashcards_csv(summary_text):
     """
-    Parser Dinámico para Anki: Lee la estructura de tablas verticales con 
-    Ejes Dinámicos e independiza cada fila en preguntas dirigidas.
+    Parser Dinámico para Anki (Estilo High-Yield): 
+    Lee la estructura de tablas verticales, traduce flechas lógicas 
+    y genera flashcards directas y densas en datos.
     Exporta en formato de texto plano (.txt) separado por tabulaciones (\t).
     """
     output = ""
@@ -11,9 +12,8 @@ def create_flashcards_csv(summary_text):
     for line in lines:
         line_str = line.strip()
         
-        # 1. Identificar la patología/enfermedad activa en el bucle
+        # 1. Identificar la patología/enfermedad activa
         if line_str.startswith('## '):
-            # Limpiamos asteriscos por si la IA resalta el título
             current_patologia = line_str.replace('## ', '').replace('**', '').strip()
             continue
             
@@ -28,22 +28,22 @@ def create_flashcards_csv(summary_text):
             cols = [col.strip() for col in line_str.split('|')[1:-1]]
             
             if len(cols) >= 2 and current_patologia:
-                # Limpiamos la columna de la pregunta (Anverso)
+                # Eje clínico limpio (Anverso)
                 eje_clinico = cols[0].replace('**', '').replace('*', '').strip()
                 
-                # La columna de la respuesta (Reverso) mantiene los <br> para que 
-                # Anki dibuje los saltos de línea correctamente en la tarjeta.
-                contenido = cols[1].strip()
+                # Mantenemos los <br> para saltos de línea en Anki 
+                # y traducimos las flechas lógicas para consistencia visual
+                contenido = cols[1].strip().replace('-->', '→').replace('->', '→')
                 
-                # Descartar ejes que la IA haya marcado como "N/E" (vacíos de info)
+                # Descartar ejes vacíos ("N/E")
                 if contenido and contenido.upper() != "N/E":
-                    # Limpiamos los asteriscos del contenido para una lectura limpia en Anki
+                    # Limpieza final de asteriscos Markdown
                     contenido_limpio = contenido.replace('**', '').replace('*', '')
                     
-                    # Formulación de la pregunta cruzando el Título con el Eje
-                    pregunta = f"¿Cuál es el/la {eje_clinico} asociado/a a: {current_patologia}?"
+                    # Formulación de la pregunta directa (Estilo academia)
+                    pregunta = f"¿{eje_clinico} de: {current_patologia}?"
                     
-                    # Inyección en el formato nativo de Anki (Pregunta \t Respuesta \n)
+                    # Inyección en formato nativo Anki
                     output += f"{pregunta}\t{contenido_limpio}\n"
                     
     return output
