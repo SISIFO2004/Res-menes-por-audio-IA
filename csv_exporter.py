@@ -1,43 +1,49 @@
 def create_flashcards_csv(summary_text):
     """
-    Parser Dinámico: Lee cualquier tabla generada, extrae los títulos de las columnas 
-    y genera preguntas de Anki tabuladas (\t) automáticamente.
+    Parser Dinámico para Anki: Lee la estructura de tablas verticales con 
+    Ejes Dinámicos e independiza cada fila en preguntas dirigidas.
+    Exporta en formato de texto plano (.txt) separado por tabulaciones (\t).
     """
     output = ""
     lines = summary_text.split('\n')
-    in_table = False
-    headers = []
+    current_patologia = ""
     
     for line in lines:
-        if line.strip().startswith('|') and line.strip().endswith('|'):
-            # Ignorar separador
-            if '---' in line:
+        line_str = line.strip()
+        
+        # 1. Identificar la patología/enfermedad activa en el bucle
+        if line_str.startswith('## '):
+            # Limpiamos asteriscos por si la IA resalta el título
+            current_patologia = line_str.replace('## ', '').replace('**', '').strip()
+            continue
+            
+        # 2. Interceptar las filas de la matriz
+        if line_str.startswith('|') and line_str.endswith('|'):
+            
+            # Omitir cabeceras de control y líneas de formato Markdown
+            if '---' in line_str or 'Eje Clínico' in line_str:
                 continue
                 
-            # Extraer columnas limpias
-            cols = [col.strip().replace('**', '') for col in line.split('|')[1:-1]]
+            # Extraer las dos columnas de la tabla vertical
+            cols = [col.strip() for col in line_str.split('|')[1:-1]]
             
-            if not in_table:
-                # La primera fila que detecta son los encabezados (Headers)
-                headers = cols
-                in_table = True
-            else:
-                # Filas de datos
-                if len(cols) == len(headers) and len(cols) > 1:
-                    concepto_principal = cols[0]
+            if len(cols) >= 2 and current_patologia:
+                # Limpiamos la columna de la pregunta (Anverso)
+                eje_clinico = cols[0].replace('**', '').replace('*', '').strip()
+                
+                # La columna de la respuesta (Reverso) mantiene los <br> para que 
+                # Anki dibuje los saltos de línea correctamente en la tarjeta.
+                contenido = cols[1].strip()
+                
+                # Descartar ejes que la IA haya marcado como "N/E" (vacíos de info)
+                if contenido and contenido.upper() != "N/E":
+                    # Limpiamos los asteriscos del contenido para una lectura limpia en Anki
+                    contenido_limpio = contenido.replace('**', '').replace('*', '')
                     
-                    # Iterar sobre el resto de las columnas para crear las flashcards
-                    for i in range(1, len(cols)):
-                        dato = cols[i]
-                        tipo_dato = headers[i]
-                        
-                        # Evitar generar tarjetas vacías si la IA puso N/E
-                        if dato and dato.upper() != "N/E":
-                            pregunta = f"¿Cuál es el/la {tipo_dato} correspondiente a: {concepto_principal}?"
-                            output += f"{pregunta}\t{dato}\n"
-        else:
-            # Reseteamos al salir de una tabla
-            in_table = False
-            headers = []
-            
+                    # Formulación de la pregunta cruzando el Título con el Eje
+                    pregunta = f"¿Cuál es el/la {eje_clinico} asociado/a a: {current_patologia}?"
+                    
+                    # Inyección en el formato nativo de Anki (Pregunta \t Respuesta \n)
+                    output += f"{pregunta}\t{contenido_limpio}\n"
+                    
     return output
