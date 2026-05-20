@@ -1,47 +1,43 @@
 def create_flashcards_csv(summary_text):
     """
-    Analiza el texto de salida del LLM y genera un formato de texto plano (.txt) 
-    separado por tabulaciones (\t), el cual es el formato nativo infalible para Anki.
+    Parser Dinámico: Lee cualquier tabla generada, extrae los títulos de las columnas 
+    y genera preguntas de Anki tabuladas (\t) automáticamente.
     """
     output = ""
     lines = summary_text.split('\n')
     in_table = False
+    headers = []
     
     for line in lines:
-        # Detectamos el inicio de la tabla
-        if 'Patología / Concepto' in line and '|' in line:
-            in_table = True
-            continue
-            
-        if in_table and '---' in line:
-            continue # Omitimos línea de formato
-            
-        if in_table and line.strip().startswith('|'):
-            # Limpiamos las columnas
-            cols = [col.strip() for col in line.split('|') if col.strip()]
-            
-            if len(cols) >= 4:
-                # Limpiar asteriscos Markdown
-                patologia = cols[0].replace('**', '').strip()
-                clinica = cols[1].replace('**', '').strip()
-                dx = cols[2].replace('**', '').strip()
-                tx = cols[3].replace('**', '').strip()
+        if line.strip().startswith('|') and line.strip().endswith('|'):
+            # Ignorar separador
+            if '---' in line:
+                continue
                 
-                # ==== FORMULACIÓN MODO PROFESOR (Separado por \t) ====
-                if clinica != "N/E":
-                    q_clin = f"🩺 Clínica: ¿Cuál es la presentación característica o signos clave en: {patologia}?"
-                    output += f"{q_clin}\t{clinica}\n"
+            # Extraer columnas limpias
+            cols = [col.strip().replace('**', '') for col in line.split('|')[1:-1]]
+            
+            if not in_table:
+                # La primera fila que detecta son los encabezados (Headers)
+                headers = cols
+                in_table = True
+            else:
+                # Filas de datos
+                if len(cols) == len(headers) and len(cols) > 1:
+                    concepto_principal = cols[0]
                     
-                if dx != "N/E":
-                    q_dx = f"🔬 Diagnóstico: Ante la sospecha de {patologia}, ¿cuál es el abordaje inicial o Gold Standard?"
-                    output += f"{q_dx}\t{dx}\n"
-                    
-                if tx != "N/E":
-                    q_tx = f"💊 Tratamiento: ¿Cuál es la primera línea de manejo indicada para {patologia}?"
-                    output += f"{q_tx}\t{tx}\n"
-                    
-        # Si la línea está vacía y ya estábamos en la tabla, cerramos el escaneo
-        elif in_table and not line.strip():
+                    # Iterar sobre el resto de las columnas para crear las flashcards
+                    for i in range(1, len(cols)):
+                        dato = cols[i]
+                        tipo_dato = headers[i]
+                        
+                        # Evitar generar tarjetas vacías si la IA puso N/E
+                        if dato and dato.upper() != "N/E":
+                            pregunta = f"¿Cuál es el/la {tipo_dato} correspondiente a: {concepto_principal}?"
+                            output += f"{pregunta}\t{dato}\n"
+        else:
+            # Reseteamos al salir de una tabla
             in_table = False
+            headers = []
             
     return output
