@@ -5,13 +5,13 @@ import time
 def process_with_llm(texto_media=None, texto_doc=None):
     """
     Motor semántico High-Yield (Estilo Sábana Clínica): 
-    Fuerza al LLM a comportarse como un arquitecto de datos, priorizando 
-    estilo telegráfico, abreviaturas, scores y secuencias lógicas.
+    Arquitectura de Fusión Total. Extrae agresivamente información de ambas
+    fuentes (Audio y PDF) para evitar vacíos (N/E) en las matrices clínicas.
     """
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
     model = genai.GenerativeModel('models/gemini-2.5-flash')
     
-    prompt_base = """Actúa como un arquitecto de datos médicos elaborando "sábanas de estudio" (fichas High-Yield) para academias de preparación de residencia médica (tipo CTO, Villamedic). Tu objetivo es la máxima densidad de datos con el mínimo de palabras.
+    prompt_base = """Actúa como un arquitecto de datos médicos elaborando "sábanas de estudio" (fichas High-Yield) para academias de preparación de residencia médica. Tu objetivo es la máxima densidad de datos con el mínimo de palabras.
 
     REGLAS ESTRICTAS DE REDACCIÓN (ESTILO ACADEMIA):
     1. ESTILO TELEGRÁFICO: CERO narrativa. CERO párrafos explicativos. Usa frases cortadas.
@@ -31,12 +31,14 @@ def process_with_llm(texto_media=None, texto_doc=None):
     - Dosis Farmacológicas / Manejo Quirúrgico.
     - Complicaciones.
 
+    FUSIÓN Y MINERÍA DE DATOS (REGLA CRÍTICA PARA EVITAR VACÍOS):
+    La Ponencia (Audio) y el Material Bibliográfico (PDF) tienen el MISMO nivel de jerarquía. 
+    Si la ponencia omite un dato clínico (ej. la fisiopatología, un score, una dosis o una complicación), PERO está presente en la bibliografía, es tu OBLIGACIÓN extraer ese dato de la bibliografía e integrarlo en la tabla. 
+    Solo debes colocar "N/E" si la información no existe en NINGUNA de las dos fuentes. Si hay contradicción directa entre ambas, prioriza la bibliografía.
+
     FORMATO INTERNO DE LAS CELDAS:
     - Usa listas con viñetas separadas por la etiqueta HTML <br> (ej. - Dato 1<br>- Dato 2).
     - Coloca en **negrita** los parámetros, valores de scores, signos patognomónicos y medicamentos de 1ra línea.
-
-    AUDITORÍA SILENCIOSA:
-    Ante cualquier contradicción entre la ponencia y la bibliografía, asume los datos de la bibliografía como la verdad absoluta y plásmalos sin mencionar el error.
 
     DATOS PARA SÍNTESIS TABULAR DE ALTO RENDIMIENTO:
     """
@@ -66,10 +68,10 @@ def process_with_llm(texto_media=None, texto_doc=None):
             prompt_1 = prompt_base + f"\n[PARTE 1 - PONENCIA]:\n{parte_1}" + biblio_context
             response_1 = model.generate_content(prompt_1)
             
-            time.sleep(35) # Respetando límites de cuota TPM
+            time.sleep(35) 
             
             # --- Fase 2 ---
-            prompt_2 = prompt_base + f"\n[PARTE 2 - PONENCIA (INCLUYE OVERLAP)]:\n[Nota algorítmica: Continúa el formato de tablas independientes. Exprime las dosis, scores y usa flechas lógicas. No repitas tablas ya creadas en la parte 1].\n\n{parte_2}" + biblio_context
+            prompt_2 = prompt_base + f"\n[PARTE 2 - PONENCIA (INCLUYE OVERLAP)]:\n[Nota algorítmica: Continúa el formato de tablas independientes. Exprime las dosis, scores y usa flechas lógicas. Recuerda MINAR la bibliografía para evitar poner N/E. No repitas tablas de la parte 1].\n\n{parte_2}" + biblio_context
             response_2 = model.generate_content(prompt_2)
             
             return f"{response_1.text.strip()}\n\n{response_2.text.strip()}"
