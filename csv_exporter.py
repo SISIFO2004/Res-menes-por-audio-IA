@@ -4,12 +4,16 @@ import io
 def create_flashcards_csv(summary_text):
     """
     Analiza el texto de salida del LLM, intercepta la tabla Markdown,
-    y formulan preguntas tipo examen (Anverso/Reverso) exportables.
+    y formulan preguntas tipo examen. 
+    Formato optimizado nativamente para Anki (Tab-Separated).
     """
     output = io.StringIO()
-    # Usamos formato genérico CSV compatible con Anki
-    writer = csv.writer(output, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
-    writer.writerow(['Pregunta (Anverso)', 'Respuesta (Reverso)'])
+    
+    # CAMBIO CRÍTICO: Usamos '\t' (Tabulador) en lugar de coma. 
+    # Este es el formato favorito y nativo de Anki.
+    writer = csv.writer(output, delimiter='\t', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+    
+    # Se eliminó la cabecera (writer.writerow) para que Anki no cree una tarjeta basura
     
     lines = summary_text.split('\n')
     in_table = False
@@ -28,7 +32,7 @@ def create_flashcards_csv(summary_text):
             cols = [col.strip() for col in line.split('|') if col.strip()]
             
             if len(cols) >= 4:
-                # Limpiar asteriscos Markdown para mejor lectura
+                # Limpiar asteriscos Markdown para lectura limpia en Anki
                 patologia = cols[0].replace('**', '').strip()
                 clinica = cols[1].replace('**', '').strip()
                 dx = cols[2].replace('**', '').strip()
