@@ -4,13 +4,12 @@ from io import BytesIO
 
 def create_word_document(summary_text):
     """
-    Exportador Word High-Yield: Genera fichas de estudio con márgenes estrechos,
-    traduce flechas lógicas y optimiza la densidad visual del texto para un
-    formato tipo "sábana médica".
+    Exportador Word: Genera fichas de estudio con márgenes estrechos,
+    traduce flechas lógicas y optimiza la densidad visual del texto.
     """
     doc = Document()
     
-    # 1. Optimización de página: Márgenes estrechos para máxima densidad de datos
+    # Optimización de página: Márgenes estrechos
     sections = doc.sections
     for section in sections:
         section.top_margin = Inches(0.5)
@@ -18,7 +17,8 @@ def create_word_document(summary_text):
         section.left_margin = Inches(0.5)
         section.right_margin = Inches(0.5)
     
-    doc.add_heading('Fichas de Estudio Clínico - High-Yield', 0)
+    # Título limpio sin el término rechazado
+    doc.add_heading('Fichas de Estudio Clínico', 0)
     
     lines = summary_text.split('\n')
     in_table = False
@@ -29,11 +29,11 @@ def create_word_document(summary_text):
         if not line_str:
             continue
             
-        # Reemplazo tipográfico de flechas lógicas para la Fisiopatología
+        # Reemplazo tipográfico de flechas lógicas
         line_str = line_str.replace('-->', '→').replace('->', '→')
             
         # =====================================================================
-        # 2. DETECCIÓN Y PROCESAMIENTO DE MATRICES (TABLAS)
+        # DETECCIÓN Y PROCESAMIENTO DE MATRICES (TABLAS)
         # =====================================================================
         if line_str.startswith('|') and line_str.endswith('|'):
             if '---' in line_str:
@@ -75,11 +75,9 @@ def create_word_document(summary_text):
                         else:
                             texto_final = parte_limpia
                             
-                        # Limpieza de asteriscos Markdown residuales
                         texto_final_limpio = texto_final.replace('**', '').replace('*', '')
                         run = p.add_run(texto_final_limpio)
                         
-                        # Mantenemos el primer eje siempre en negrita
                         if i == 0:
                             run.bold = True
             continue
@@ -87,7 +85,7 @@ def create_word_document(summary_text):
             in_table = False 
             
         # =====================================================================
-        # 3. PROCESAMIENTO DE TÍTULOS Y TEXTO LIBRE
+        # PROCESAMIENTO DE TÍTULOS Y TEXTO LIBRE
         # =====================================================================
         if line_str.startswith('### '):
             doc.add_heading(line_str.replace('### ', '').replace('**', '').strip(), level=2)
