@@ -5,7 +5,7 @@ from llm_client import process_with_llm
 from word_exporter import create_word_document
 from csv_exporter import create_flashcards_csv
 from asr_client import transcribe_media  
-from doc_processor import process_documents  # Integración de tu procesador de PDFs y PPTXs
+from doc_processor import process_documents  
 
 # Configuración de la página
 st.set_page_config(
@@ -29,11 +29,12 @@ with col1:
     )
 
 with col2:
+    # AQUÍ ESTÁ EL CAMBIO CLAVE PARA ACEPTAR MÁS FORMATOS
     st.subheader("2. Material Bibliográfico (PDF / PPTX)")
     archivos_docs = st.file_uploader(
         "Carga los documentos de referencia:", 
         type=["pdf", "ppt", "pptx"],
-        accept_multiple_files=True  # Permite subir varios PDFs o PPTs al mismo tiempo
+        accept_multiple_files=True  
     )
 
 # La caja de inyección de prompt dinámico
@@ -61,7 +62,7 @@ if st.button("Generar Fichas de Estudio", use_container_width=True):
                 
                 if "Error" in texto_media:
                     st.error(texto_media)
-                    st.stop()  # Detiene la ejecución si falla el audio
+                    st.stop()  
             
             # 2. Procesamiento de PDFs y PPTXs usando doc_processor.py
             if archivos_docs:
