@@ -19,16 +19,23 @@ def transcribe_media(media_file):
         
         media_upload = genai.upload_file(path=file_path, mime_type=media_file.type)
         
+        # ==============================================================
+        # LA SOLUCIÓN AL ERROR 429: POLLING ESPACIADO
+        # Aumentamos de 2 a 12 segundos para no agotar la cuota gratuita
+        # ==============================================================
         while media_upload.state.name == "PROCESSING":
-            time.sleep(2)
+            time.sleep(12) 
             media_upload = genai.get_file(media_upload.name)
             
         if media_upload.state.name == "FAILED":
-            return "Error: Falla crítica en el procesamiento del archivo multimedia."
+            return "Error: Falla crítica en el procesamiento del archivo multimedia por parte de Google."
             
         model = genai.GenerativeModel('models/gemini-2.5-flash')
         
-        # Directiva adaptada para inferencia multimodal (Audio + Fotogramas)
+        # Pequeña pausa de seguridad antes de pedir la inferencia final
+        time.sleep(5)
+        
+        # Directiva adaptada para inferencia multimodal
         response = model.generate_content([
             "Analiza este archivo multimedia. Transcribe el contenido hablado íntegramente. Si es un archivo de video, extrae e integra al texto cualquier información visual clínica relevante (diagramas, diapositivas, esquemas anatómicos). Mantén estricta precisión técnica médica.",
             media_upload
@@ -41,4 +48,7 @@ def transcribe_media(media_file):
         return response.text
         
     except Exception as e:
-        return f"Error técnico en el motor de extracción: {str(e)}"
+        error_msg = str(e)
+        if "429" in error_msg or "Quota" in error_msg:
+            return "⚠️ **Límite de cuota superado en el Audio.** Google está procesando demasiadas peticiones. Espera 1 minuto y vuelve a darle al botón."
+        return f"Error técnico en el motor de extracción: {error_msg}"
