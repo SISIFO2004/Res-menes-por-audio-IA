@@ -1,11 +1,11 @@
 import streamlit as st
 import PyPDF2
-from io import BytesIO
 
-# Importaciones de los módulos del sistema
+# Importaciones de los módulos de tu sistema
 from llm_client import process_with_llm
 from word_exporter import create_word_document
 from csv_exporter import create_flashcards_csv
+from asr_client import transcribe_media  # Integración real de tu módulo de audio
 
 # Configuración de la página
 st.set_page_config(
@@ -16,43 +16,55 @@ st.set_page_config(
 
 # Interfaz Principal
 st.title("⚕️ Sistema de Fichas Clínicas Autogestionado")
-st.markdown("Procesa tus transcripciones y bibliografía para generar matrices de estudio y tarjetas de Anki.")
+st.markdown("Sube el audio de tu clase y tu bibliografía para generar matrices de estudio y tarjetas de Anki.")
 
-# Contenedores de entrada de datos
+# Contenedores de entrada de datos (Uploaders)
 col1, col2 = st.columns(2)
 
 with col1:
-    st.subheader("1. Ponencia Oral (Audio transcrito)")
-    texto_media = st.text_area(
-        "Pega aquí la transcripción de la clase:", 
-        height=250,
-        placeholder="Pega el texto de tu clase o apuntes aquí..."
+    st.subheader("1. Ponencia Oral (Audio/Video)")
+    archivo_audio = st.file_uploader(
+        "Carga el archivo multimedia de la clase:", 
+        type=["mp3", "wav", "m4a", "ogg", "mp4"]
     )
 
 with col2:
     st.subheader("2. Material Bibliográfico (PDF)")
     archivo_pdf = st.file_uploader(
-        "Sube el documento de referencia (PDF)", 
+        "Carga el documento de referencia (PDF):", 
         type=["pdf"]
     )
 
-# Inyección de directivas dinámicas
-st.subheader("3. Instrucciones Especiales para el Análisis")
+# La caja de inyección de prompt dinámico
+st.subheader("3. Instrucciones Especiales para la IA (Opcional)")
 instrucciones_extra = st.text_area(
-    "🧠 Directivas (Opcional)",
-    placeholder="Ej. 'Resume solo los tratamientos de primera línea', 'Omite la fisiopatología para hacerlo corto', 'Céntrate estrictamente en los criterios diagnósticos'. Si lo dejas vacío, realizará el análisis tabular completo."
+    "🧠 Escribe tu directiva personalizada aquí:",
+    height=100,
+    placeholder="Ej. 'Resume solo los tratamientos de primera línea', 'Omite la fisiopatología', 'Hazlo extremadamente corto'. Si lo dejas vacío, el sistema hará el análisis tabular completo."
 )
 
 # Botón de ejecución
 if st.button("Generar Fichas de Estudio", use_container_width=True):
-    if not texto_media and not archivo_pdf:
-        st.warning("⚠️ Debes proporcionar la transcripción de la ponencia o un documento PDF para iniciar el análisis.")
+    if not archivo_audio and not archivo_pdf:
+        st.warning("⚠️ Debes cargar al menos un archivo (Audio o PDF) para iniciar el análisis.")
     else:
-        with st.spinner("Procesando datos clínicos y estructurando matrices... Esto puede tomar un momento debido a los límites de la API."):
+        with st.spinner("Procesando archivos y estructurando matrices clínicas... Esto puede tardar varios minutos debido al análisis del audio."):
+            
+            texto_media = ""
             texto_doc = ""
             
-            # Extracción de texto del PDF 
+            # 1. Procesamiento del Audio usando asr_client.py
+            if archivo_audio is not None:
+                st.info("Transcribiendo y analizando el contenido multimedia...")
+                texto_media = transcribe_media(archivo_audio)
+                
+                if "Error" in texto_media:
+                    st.error(texto_media)
+                    st.stop()  # Detiene la ejecución si falla el audio
+            
+            # 2. Procesamiento del PDF
             if archivo_pdf is not None:
+                st.info("Extrayendo texto de la bibliografía...")
                 try:
                     lector_pdf = PyPDF2.PdfReader(archivo_pdf)
                     for pagina in lector_pdf.pages:
@@ -61,17 +73,19 @@ if st.button("Generar Fichas de Estudio", use_container_width=True):
                             texto_doc += texto_extraido + "\n"
                 except Exception as e:
                     st.error(f"Error al procesar el archivo PDF: {str(e)}")
+                    st.stop()
             
-            # Llamada al motor de inferencia (LLM)
+            # 3. Llamada al motor de inferencia (LLM)
+            st.info("Estructurando matrices de conocimiento clínico...")
             resultado_md = process_with_llm(texto_media, texto_doc, instrucciones_extra)
             
-            # Manejo de errores de la API o visualización de resultados
+            # Manejo de errores de la API en el modelo principal
             if "Error" in resultado_md or "⚠️" in resultado_md:
                 st.error(resultado_md)
             else:
                 st.success("¡Análisis completado con éxito!")
                 
-                # Renderizado de la previsualización en Streamlit
+                # Renderizado de la previsualización en la web
                 st.markdown("---")
                 st.markdown("### Vista Previa de las Fichas")
                 st.markdown(resultado_md)
