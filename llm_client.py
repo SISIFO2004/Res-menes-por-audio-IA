@@ -2,10 +2,10 @@ import google.generativeai as genai
 import streamlit as st
 import time
 
-def process_with_llm(texto_media=None, texto_doc=None):
+def process_with_llm(texto_media=None, texto_doc=None, instrucciones_usuario=""):
     """
     Motor semántico (Estilo Fichas de Estudio Clínico): 
-    Arquitectura de Fusión Total con formato Markdown estricto y cero conversacional.
+    Arquitectura de Fusión Total con soporte para inyección de directivas dinámicas del usuario.
     """
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
     model = genai.GenerativeModel('models/gemini-2.5-flash')
@@ -30,21 +30,30 @@ def process_with_llm(texto_media=None, texto_doc=None):
     Debes incluir ejes básicos, pero es OBLIGATORIO crear nuevas filas si detectas:
     - Epidemiología / Factores de Riesgo.
     - Criterios Diagnósticos exactos.
-    - Scores / Clasificaciones (Detalla la escala, ej. Child-Pugh, d'Amico, MELD, FIB-4).
+    - Scores / Clasificaciones.
     - Dosis Farmacológicas / Manejo Quirúrgico.
     - Complicaciones.
 
-    FUSIÓN Y MINERÍA DE DATOS (REGLA CRÍTICA PARA EVITAR VACÍOS):
-    La Ponencia (Audio) y el Material Bibliográfico (PDF) tienen el MISMO nivel de jerarquía. 
-    Si una fuente omite un dato clínico (ej. un score o una dosis), PERO está presente en la otra, es tu OBLIGACIÓN extraer ese dato e integrarlo en la tabla. 
-    Solo debes colocar "N/E" si la información no existe en NINGUNA de las dos fuentes. Si hay contradicción directa entre ambas, prioriza la bibliografía.
-
-    FORMATO INTERNO DE LAS CELDAS:
-    - Usa listas con viñetas separadas por la etiqueta HTML <br> (ej. - Dato 1<br>- Dato 2).
-    - Coloca en **negrita** los parámetros, valores de scores, signos patognomónicos y medicamentos de 1ra línea.
-
-    DATOS PARA SÍNTESIS TABULAR:
+    FUSIÓN Y MINERÍA DE DATOS:
+    La Ponencia (Audio) y el Material Bibliográfico (PDF) tienen el MISMO nivel de jerarquía. Rellena los vacíos de una fuente usando la otra.
     """
+    
+    # =====================================================================
+    # INYECCIÓN DINÁMICA DE LA ORDEN DEL USUARIO (OVERRIDE)
+    # =====================================================================
+    if instrucciones_usuario and instrucciones_usuario.strip() != "":
+        prompt_base += f"""
+    ======================================================================
+    🚨 INSTRUCCIÓN ESPECIAL DEL USUARIO (PRIORIDAD MÁXIMA) 🚨
+    El usuario ha dado la siguiente directiva específica para este análisis:
+    "{instrucciones_usuario}"
+    
+    DEBES OBEDECER ESTA INSTRUCCIÓN POR ENCIMA DE CUALQUIER OTRA REGLA.
+    Si el usuario te pide omitir ciertos ejes (ej. no incluir fisiopatología), omítelos. Si te pide ser extremadamente breve, recorta la información. Si te pide enfocarte solo en un aspecto (ej. solo tratamiento), ajusta el contenido de las tablas SOLO a eso.
+    ======================================================================
+    """
+    
+    prompt_base += "\nDATOS PARA SÍNTESIS TABULAR:\n"
     
     if not texto_media and not texto_doc:
         return "Error: Ausencia de matrices de datos para el análisis."
@@ -67,21 +76,16 @@ def process_with_llm(texto_media=None, texto_doc=None):
             
             biblio_context = f"\n\n[GROUND TRUTH BIBLIOGRÁFICO]:\n{texto_doc}" if texto_doc else "\n\n[GROUND TRUTH]: No provista."
             
-            # --- Fase 1 ---
             prompt_1 = prompt_base + f"\n[PARTE 1 - PONENCIA]:\n{parte_1}" + biblio_context
             response_1 = model.generate_content(prompt_1)
             
             time.sleep(35) 
             
-            # --- Fase 2 ---
-            prompt_2 = prompt_base + f"\n[PARTE 2 - PONENCIA (INCLUYE OVERLAP)]:\n[Nota algorítmica: Continúa el formato de cuadros independientes. CERO INTRODUCCIONES. Empieza directamente con el título ##. Recuerda usar exactamente la cabecera |---|---|. No repitas tablas de la parte 1].\n\n{parte_2}" + biblio_context
+            prompt_2 = prompt_base + f"\n[PARTE 2 - PONENCIA (INCLUYE OVERLAP)]:\n[Nota algorítmica: Continúa el formato y OBEDECE ESTRICTAMENTE LA INSTRUCCIÓN DEL USUARIO si la hay. Empieza directamente con el título ##].\n\n{parte_2}" + biblio_context
             response_2 = model.generate_content(prompt_2)
             
             return f"{response_1.text.strip()}\n\n{response_2.text.strip()}"
             
-        # =====================================================================
-        # EJECUCIÓN ESTÁNDAR 
-        # =====================================================================
         else:
             if texto_media and texto_doc:
                 prompt_final = prompt_base + f"\n[PONENCIA ORAL]:\n{texto_media}\n\n[GROUND TRUTH BIBLIOGRÁFICO]:\n{texto_doc}"
