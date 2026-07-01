@@ -2,14 +2,36 @@ import google.generativeai as genai
 import streamlit as st
 import time
 
+def fraccionar_texto(texto, limite_caracteres=18000):
+    """Corta un texto largo en fragmentos más pequeños respetando los saltos de línea."""
+    fragmentos = []
+    while len(texto) > 0:
+        if len(texto) <= limite_caracteres:
+            fragmentos.append(texto)
+            break
+        
+        # Buscar un buen punto de corte (doble salto de línea o punto)
+        punto_corte = texto.rfind('\n\n', 0, limite_caracteres)
+        if punto_corte == -1: 
+            punto_corte = texto.rfind('\n', 0, limite_caracteres)
+        if punto_corte == -1: 
+            punto_corte = limite_caracteres
+            
+        fragmentos.append(texto[:punto_corte])
+        texto = texto[punto_corte:]
+        
+    return fragmentos
+
 def process_with_llm(texto_media=None, texto_doc=None, instrucciones_usuario=""):
     """
-    Motor semántico (Estilo Fichas de Estudio Clínico): 
-    Arquitectura de Fusión Total con soporte para inyección de directivas dinámicas del usuario.
+    Motor semántico con Chunking Dinámico (Fraccionamiento en Lotes)
+    para evitar el Error 429 (Cuota Excedida) en la capa gratuita de Gemini.
+    Incluye el prompt médico High-Yield completo e intacto.
     """
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
     model = genai.GenerativeModel('models/gemini-2.5-flash')
     
+    # PROMPT 100% INTACTO CON TODAS LAS REGLAS DE MINERÍA Y FORMATO
     prompt_base = """Actúa como un arquitecto de datos médicos elaborando cuadros de estudio avanzados para preparación médica. Tu objetivo es la máxima densidad de datos con el mínimo de palabras.
 
     REGLAS ESTRICTAS DE REDACCIÓN (CERO CONVERSACIÓN):
@@ -30,17 +52,21 @@ def process_with_llm(texto_media=None, texto_doc=None, instrucciones_usuario="")
     Debes incluir ejes básicos, pero es OBLIGATORIO crear nuevas filas si detectas:
     - Epidemiología / Factores de Riesgo.
     - Criterios Diagnósticos exactos.
-    - Scores / Clasificaciones.
+    - Scores / Clasificaciones (Detalla la escala, ej. Child-Pugh, d'Amico, MELD, FIB-4).
     - Dosis Farmacológicas / Manejo Quirúrgico.
     - Complicaciones.
 
-    FUSIÓN Y MINERÍA DE DATOS:
-    La Ponencia (Audio) y el Material Bibliográfico (PDF) tienen el MISMO nivel de jerarquía. Rellena los vacíos de una fuente usando la otra.
+    FUSIÓN Y MINERÍA DE DATOS (REGLA CRÍTICA PARA EVITAR VACÍOS):
+    La Ponencia (Audio) y el Material Bibliográfico (PDF) tienen el MISMO nivel de jerarquía. 
+    Si una fuente omite un dato clínico (ej. un score o una dosis), PERO está presente en la otra, es tu OBLIGACIÓN extraer ese dato e integrarlo en la tabla. 
+    Solo debes colocar "N/E" si la información no existe en NINGUNA de las dos fuentes. Si hay contradicción directa entre ambas, prioriza la bibliografía.
+
+    FORMATO INTERNO DE LAS CELDAS:
+    - Usa listas con viñetas separadas por la etiqueta HTML <br> (ej. - Dato 1<br>- Dato 2).
+    - Coloca en **negrita** los parámetros, valores de scores, signos patognomónicos y medicamentos de 1ra línea.
     """
     
-    # =====================================================================
-    # INYECCIÓN DINÁMICA DE LA ORDEN DEL USUARIO (OVERRIDE)
-    # =====================================================================
+    # INYECCIÓN DEL USUARIO
     if instrucciones_usuario and instrucciones_usuario.strip() != "":
         prompt_base += f"""
     ======================================================================
@@ -59,46 +85,45 @@ def process_with_llm(texto_media=None, texto_doc=None, instrucciones_usuario="")
         return "Error: Ausencia de matrices de datos para el análisis."
 
     try:
-        # =====================================================================
-        # BIFURCACIÓN DE CARGA (Con algoritmo Overlap de 800 caracteres)
-        # =====================================================================
-        if texto_media and len(texto_media) > 30000:
+        texto_media_seguro = texto_media if texto_media else ""
+        texto_doc_seguro = texto_doc if texto_doc else ""
+        
+        biblio_context = f"\n\n[GROUND TRUTH BIBLIOGRÁFICO]:\n{texto_doc_seguro}" if texto_doc_seguro else ""
+        
+        # BUCLE DE FRACCIONAMIENTO ANTI-ERROR 429
+        if len(texto_media_seguro) > 20000:
+            lotes = fraccionar_texto(texto_media_seguro, 18000)
+            resultados_completos = []
             
-            mitad = len(texto_media) // 2
-            punto_corte = texto_media.find('\n\n', mitad)
-            if punto_corte == -1: punto_corte = texto_media.find('\n', mitad)
-            if punto_corte == -1: punto_corte = mitad
+            barra_progreso = st.progress(0)
+            st.info(f"El archivo es muy grande. Dividido en {len(lotes)} fragmentos para evitar colapso de red...")
+            
+            for i, fragmento in enumerate(lotes):
                 
-            overlap_size = 800
-            inicio_parte_2 = max(0, punto_corte - overlap_size)
-            parte_1 = texto_media[:punto_corte]
-            parte_2 = texto_media[inicio_parte_2:]
+                nota_continuacion = "" if i == 0 else "\n[NOTA: Este es un fragmento de continuación. Sigue generando cuadros con el formato |---|---| y OBEDECE ESTRICTAMENTE LA INSTRUCCIÓN DEL USUARIO si la hay. Empieza directamente con el título ##. No repitas información previa.]"
+                
+                prompt_lote = prompt_base + f"\n[PONENCIA ORAL (FRAGMENTO {i+1})]:\n{fragmento}" + biblio_context + nota_continuacion
+                
+                respuesta = model.generate_content(prompt_lote)
+                resultados_completos.append(respuesta.text.strip())
+                
+                progreso_actual = (i + 1) / len(lotes)
+                barra_progreso.progress(progreso_actual)
+                
+                if i < len(lotes) - 1:
+                    time.sleep(15) 
             
-            biblio_context = f"\n\n[GROUND TRUTH BIBLIOGRÁFICO]:\n{texto_doc}" if texto_doc else "\n\n[GROUND TRUTH]: No provista."
-            
-            prompt_1 = prompt_base + f"\n[PARTE 1 - PONENCIA]:\n{parte_1}" + biblio_context
-            response_1 = model.generate_content(prompt_1)
-            
-            time.sleep(35) 
-            
-            prompt_2 = prompt_base + f"\n[PARTE 2 - PONENCIA (INCLUYE OVERLAP)]:\n[Nota algorítmica: Continúa el formato y OBEDECE ESTRICTAMENTE LA INSTRUCCIÓN DEL USUARIO si la hay. Empieza directamente con el título ##].\n\n{parte_2}" + biblio_context
-            response_2 = model.generate_content(prompt_2)
-            
-            return f"{response_1.text.strip()}\n\n{response_2.text.strip()}"
+            barra_progreso.empty() 
+            return "\n\n".join(resultados_completos)
             
         else:
-            if texto_media and texto_doc:
-                prompt_final = prompt_base + f"\n[PONENCIA ORAL]:\n{texto_media}\n\n[GROUND TRUTH BIBLIOGRÁFICO]:\n{texto_doc}"
-            elif texto_media:
-                prompt_final = prompt_base + f"\n[PONENCIA ORAL]:\n{texto_media}\n\n(No hay bibliografía de contraste)."
-            elif texto_doc:
-                prompt_final = prompt_base + f"\n\n[MATERIAL BIBLIOGRÁFICO]:\n{texto_doc}"
-                
+            # Ejecución estándar para textos cortos
+            prompt_final = prompt_base + f"\n[PONENCIA ORAL]:\n{texto_media_seguro}" + biblio_context
             response = model.generate_content(prompt_final)
             return response.text.strip()
 
     except Exception as e:
         error_msg = str(e)
         if "429" in error_msg or "Quota" in error_msg:
-            return "⚠️ **Límite de cuota superado.** El volumen excede el límite temporal de la API. Por favor, reintente en unos minutos."
+            return "⚠️ **Límite de cuota superado.** Por favor, espera 1 minuto sin presionar el botón y vuelve a intentarlo."
         return f"Error técnico en LLM: {error_msg}"
