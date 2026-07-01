@@ -1,11 +1,11 @@
 import streamlit as st
-import PyPDF2
 
 # Importaciones de los módulos de tu sistema
 from llm_client import process_with_llm
 from word_exporter import create_word_document
 from csv_exporter import create_flashcards_csv
-from asr_client import transcribe_media  # Integración real de tu módulo de audio
+from asr_client import transcribe_media  
+from doc_processor import process_documents  # Integración de tu procesador de PDFs y PPTXs
 
 # Configuración de la página
 st.set_page_config(
@@ -29,10 +29,11 @@ with col1:
     )
 
 with col2:
-    st.subheader("2. Material Bibliográfico (PDF)")
-    archivo_pdf = st.file_uploader(
-        "Carga el documento de referencia (PDF):", 
-        type=["pdf"]
+    st.subheader("2. Material Bibliográfico (PDF / PPTX)")
+    archivos_docs = st.file_uploader(
+        "Carga los documentos de referencia:", 
+        type=["pdf", "ppt", "pptx"],
+        accept_multiple_files=True  # Permite subir varios PDFs o PPTs al mismo tiempo
     )
 
 # La caja de inyección de prompt dinámico
@@ -45,10 +46,10 @@ instrucciones_extra = st.text_area(
 
 # Botón de ejecución
 if st.button("Generar Fichas de Estudio", use_container_width=True):
-    if not archivo_audio and not archivo_pdf:
-        st.warning("⚠️ Debes cargar al menos un archivo (Audio o PDF) para iniciar el análisis.")
+    if not archivo_audio and not archivos_docs:
+        st.warning("⚠️ Debes cargar al menos un archivo (Audio o Documento bibliográfico) para iniciar el análisis.")
     else:
-        with st.spinner("Procesando archivos y estructurando matrices clínicas... Esto puede tardar varios minutos debido al análisis del audio."):
+        with st.spinner("Procesando archivos y estructurando matrices clínicas... Esto puede tardar varios minutos."):
             
             texto_media = ""
             texto_doc = ""
@@ -62,17 +63,13 @@ if st.button("Generar Fichas de Estudio", use_container_width=True):
                     st.error(texto_media)
                     st.stop()  # Detiene la ejecución si falla el audio
             
-            # 2. Procesamiento del PDF
-            if archivo_pdf is not None:
-                st.info("Extrayendo texto de la bibliografía...")
-                try:
-                    lector_pdf = PyPDF2.PdfReader(archivo_pdf)
-                    for pagina in lector_pdf.pages:
-                        texto_extraido = pagina.extract_text()
-                        if texto_extraido:
-                            texto_doc += texto_extraido + "\n"
-                except Exception as e:
-                    st.error(f"Error al procesar el archivo PDF: {str(e)}")
+            # 2. Procesamiento de PDFs y PPTXs usando doc_processor.py
+            if archivos_docs:
+                st.info("Extrayendo texto de la bibliografía (PDFs/PPTs)...")
+                texto_doc = process_documents(archivos_docs)
+                
+                if not texto_doc:
+                    st.error("Error al procesar los documentos bibliográficos.")
                     st.stop()
             
             # 3. Llamada al motor de inferencia (LLM)
