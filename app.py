@@ -1,120 +1,104 @@
 import streamlit as st
-from doc_processor import process_documents
-from asr_client import transcribe_media
+import PyPDF2
+from io import BytesIO
+
+# Importaciones de los módulos del sistema
 from llm_client import process_with_llm
 from word_exporter import create_word_document
 from csv_exporter import create_flashcards_csv
 
-# Configuración técnica de la página
+# Configuración de la página
 st.set_page_config(
-    page_title="Centro de Análisis Semántico Médico",
-    page_icon="🩺",
-    layout="wide",
-    initial_sidebar_state="collapsed"
+    page_title="Generador de Fichas Clínicas",
+    page_icon="⚕️",
+    layout="wide"
 )
 
-# Estilización de cabecera profesional
-st.title("👨‍⚕️ Sistema de Resúmenes y Auditoría Médica")
-st.markdown("""
-    **Motor de Inferencia:** Gemini 2.5 Flash | **Protocolo:** Validación Cruzada y Exportación High-Yield
-    ---
-""")
+# Interfaz Principal
+st.title("⚕️ Sistema de Fichas Clínicas Autogestionado")
+st.markdown("Procesa tus transcripciones y bibliografía para generar matrices de estudio y tarjetas de Anki.")
 
-# Inicialización de estado para persistencia de datos (Memoria UI)
-if 'resumen_generado' not in st.session_state:
-    st.session_state.resumen_generado = None
-if 'log_transcripcion' not in st.session_state:
-    st.session_state.log_transcripcion = None
+# Contenedores de entrada de datos
+col1, col2 = st.columns(2)
 
-# Zona de Carga de Matrices de Datos
-with st.container():
-    col1, col2 = st.columns(2)
-    with col1:
-        st.subheader("📁 Ingesta Multimedia")
-        media_file = st.file_uploader(
-            "Carga la ponencia (.wav, .mp3, .m4a, .mp4)", 
-            type=["wav", "mp3", "m4a", "mp4"],
-            help="Soporta video para extraer datos visuales clínicos."
-        )
-    with col2:
-        st.subheader("📄 Referencia Bibliográfica (Ground Truth)")
-        doc_files = st.file_uploader(
-            "Carga guías o PPTX (.pdf, .pptx) [Múltiples permitidos]", 
-            type=["pdf", "pptx"],
-            accept_multiple_files=True,
-            help="El motor auditará y corregirá la transcripción oral utilizando estos documentos."
-        )
+with col1:
+    st.subheader("1. Ponencia Oral (Audio transcrito)")
+    texto_media = st.text_area(
+        "Pega aquí la transcripción de la clase:", 
+        height=250,
+        placeholder="Pega el texto de tu clase o apuntes aquí..."
+    )
 
-st.markdown("---")
+with col2:
+    st.subheader("2. Material Bibliográfico (PDF)")
+    archivo_pdf = st.file_uploader(
+        "Sube el documento de referencia (PDF)", 
+        type=["pdf"]
+    )
 
-# Pipeline de Ejecución
-col_btn, col_reset = st.columns([1, 4])
-with col_btn:
-    ejecutar = st.button("🚀 Iniciar Análisis Clínico", type="primary", use_container_width=True)
-with col_reset:
-    if st.button("🧹 Limpiar Sistema", use_container_width=False):
-        st.session_state.resumen_generado = None
-        st.session_state.log_transcripcion = None
-        st.rerun()
+# Inyección de directivas dinámicas
+st.subheader("3. Instrucciones Especiales para el Análisis")
+instrucciones_extra = st.text_area(
+    "🧠 Directivas (Opcional)",
+    placeholder="Ej. 'Resume solo los tratamientos de primera línea', 'Omite la fisiopatología para hacerlo corto', 'Céntrate estrictamente en los criterios diagnósticos'. Si lo dejas vacío, realizará el análisis tabular completo."
+)
 
-if ejecutar:
-    if not media_file and not doc_files:
-        st.error("Protocolo interrumpido: Se requiere al menos una fuente de datos.")
+# Botón de ejecución
+if st.button("Generar Fichas de Estudio", use_container_width=True):
+    if not texto_media and not archivo_pdf:
+        st.warning("⚠️ Debes proporcionar la transcripción de la ponencia o un documento PDF para iniciar el análisis.")
     else:
-        try:
-            # Reemplazo de st.spinner por st.status para mejor UX durante la inferencia
-            with st.status("Iniciando pipeline de procesamiento...", expanded=True) as status:
-                
-                st.write("⏳ Extrayendo texto bibliográfico (Ground Truth)...")
-                texto_doc = process_documents(doc_files) if doc_files else None
-                
-                st.write("🎙️ Procesando y transcribiendo archivos multimedia...")
-                texto_media = transcribe_media(media_file) if media_file else None
-                st.session_state.log_transcripcion = texto_media
-                
-                st.write("🧠 Ejecutando motor de inferencia semántica y auditoría cruzada...")
-                st.write("*(Si el archivo es muy largo, el sistema aplicará pausas de seguridad automáticamente)*")
-                st.session_state.resumen_generado = process_with_llm(texto_media, texto_doc)
-                
-                status.update(label="✅ Análisis y validación completados exitosamente", state="complete", expanded=False)
-                
-        except Exception as e:
-            st.error(f"Falla crítica en el pipeline: {str(e)}")
-
-# Despliegue de Resultados Persistentes y Exportación
-if st.session_state.resumen_generado:
-    tab1, tab2 = st.tabs(["📊 Reporte Clínico Auditado", "📜 Log de Extracción Bruta"])
-    
-    with tab1:
-        # Renderizado del Markdown generado por el LLM
-        st.markdown(st.session_state.resumen_generado)
-        
-        # Herramientas de Exportación Profesional
-        st.divider()
-        col_word, col_csv = st.columns(2)
-        
-        with col_word:
-            word_file = create_word_document(st.session_state.resumen_generado)
-            st.download_button(
-                label="📄 Descargar Reporte (.docx)",
-                data=word_file,
-                file_name="analisis_clinico_ia.docx",
-                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                use_container_width=True
-            )
+        with st.spinner("Procesando datos clínicos y estructurando matrices... Esto puede tomar un momento debido a los límites de la API."):
+            texto_doc = ""
             
-        with col_csv:
-            csv_data = create_flashcards_csv(st.session_state.resumen_generado)
-            st.download_button(
-                label="🧠 Descargar Mazo Examen (.csv)",
-                data=csv_data,
-                file_name="flashcards_medicina.csv",
-                mime="text/csv",
-                use_container_width=True
-            )
-        
-    with tab2:
-        if st.session_state.log_transcripcion:
-            st.text_area("Texto bruto extraído de la ponencia multimedia:", st.session_state.log_transcripcion, height=400)
-        else:
-            st.info("No hay datos multimedia en este análisis.")
+            # Extracción de texto del PDF 
+            if archivo_pdf is not None:
+                try:
+                    lector_pdf = PyPDF2.PdfReader(archivo_pdf)
+                    for pagina in lector_pdf.pages:
+                        texto_extraido = pagina.extract_text()
+                        if texto_extraido:
+                            texto_doc += texto_extraido + "\n"
+                except Exception as e:
+                    st.error(f"Error al procesar el archivo PDF: {str(e)}")
+            
+            # Llamada al motor de inferencia (LLM)
+            resultado_md = process_with_llm(texto_media, texto_doc, instrucciones_extra)
+            
+            # Manejo de errores de la API o visualización de resultados
+            if "Error" in resultado_md or "⚠️" in resultado_md:
+                st.error(resultado_md)
+            else:
+                st.success("¡Análisis completado con éxito!")
+                
+                # Renderizado de la previsualización en Streamlit
+                st.markdown("---")
+                st.markdown("### Vista Previa de las Fichas")
+                st.markdown(resultado_md)
+                st.markdown("---")
+                
+                # Generación en memoria de los archivos exportables
+                word_buffer = create_word_document(resultado_md)
+                csv_text = create_flashcards_csv(resultado_md)
+                
+                # Botones de Descarga
+                st.markdown("### 📥 Descargar Materiales de Estudio")
+                d_col1, d_col2 = st.columns(2)
+                
+                with d_col1:
+                    st.download_button(
+                        label="📄 Descargar Fichas en Word",
+                        data=word_buffer,
+                        file_name="Fichas_Estudio_Clinico.docx",
+                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                        use_container_width=True
+                    )
+                    
+                with d_col2:
+                    st.download_button(
+                        label="🗂️ Descargar Mazo Anki (.txt)",
+                        data=csv_text,
+                        file_name="Tarjetas_Anki.txt",
+                        mime="text/plain",
+                        use_container_width=True
+                    )
